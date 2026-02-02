@@ -28,7 +28,7 @@ Four species are eliminated due to their very small hypervolumes, because they d
 "
 
 # Lentic --------------------------------------------------------------------------------------------
-load("02_RESULTS/01_Hypervolume/hv_list_Lentic_sp.RData")
+load("02_Hypervolume/hv_list_Lentic_sp.RData")
 hv_list_Species
 class(hv_list_Species)
 
@@ -93,12 +93,12 @@ for (i in 1:(length(hv_list@HVList) - 1)) {
 }
 results
 
-write.csv(results, "Results_Overlap_pairs_wise/results_overlap_Lentic.csv", row.names = FALSE)
+write.csv(results, "02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_Lentic.csv", row.names = FALSE)
 
 
 # Lotic --------------------------------------------------------------------------------------------
 
-load("02_RESULTS/01_Hypervolume/hv_list_Lotic_sp.RData")
+load("02_Hypervolume/hv_list_Lotic_sp.RData")
 hv_list_Species
 
 class(hv_list_Species)
@@ -159,7 +159,7 @@ for (i in 1:(length(hv_list@HVList) - 1)) {  # Ajustar el rango del primer bucle
   }
 }
 
-write.csv(results, "Results_Overlap_pairs_wise/results_overlap_Lotic.csv", row.names = FALSE)
+write.csv(results, "02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_Lotic.csv", row.names = FALSE)
 
 
 # All species --------------------------------------------------------------------------------------------
@@ -212,4 +212,4 @@ for (i in 1:(length(hv_list@HVList) - 1)) {
   }
 }
 
-write.csv(results, "Results_Overlap_pairs_wise/results_overlap_all_species.csv", row.names = FALSE)
+write.csv(results, "02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_all_species.csv", row.names = FALSE)
