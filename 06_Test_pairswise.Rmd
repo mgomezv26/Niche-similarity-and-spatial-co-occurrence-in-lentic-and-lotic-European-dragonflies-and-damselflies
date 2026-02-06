@@ -4,11 +4,11 @@ author: "Gómez-Vadillo, Mónica ([GitHub: @mgomezzv26](https://github.com/mgome
 date: "`r Sys.Date()`"
 geometry: "left=2cm,right=2cm,top=2cm,bottom=2cm"
 output:
+  pdf_document:
+    toc: true
   html_document:
     toc: true
     toc_depth: 2
-  pdf_document:
-    toc: true
 author-url: "https://github.com/mgomezv26"
 ---
 
@@ -39,8 +39,8 @@ cat("dunn.test:", as.character(packageVersion("dunn.test")), "\n") # dunn.test: 
 
 ```{r}
 all_sp <- read.csv("02_Hypervolume/R_Overlap_pairs_wise/results_overlap_all_species.csv")
-lentic_sp <- read.csv("02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_Lentic.csv")
-lotic_sp <- read.csv("02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_Lotic.csv")
+lentic_sp <- read.csv("02_Hypervolume/R_Overlap_pairs_wise/results_overlap_Lentic.csv")
+lotic_sp <- read.csv("02_Hypervolume/R_Overlap_pairs_wise/results_overlap_Lotic.csv")
 
 ```
 
@@ -59,8 +59,8 @@ species_sp2 = unique(all_sp$sp2)
 sp1_df = as.data.frame(species_sp1)
 sp2_df = as.data.frame(species_sp2)
 
-write.csv(sp1_df, "sp1_df.csv")
-write.csv(sp2_df, "sp2_df.csv")
+#write.csv(sp1_df, "sp1_df.csv")
+#write.csv(sp2_df, "sp2_df.csv")
 ```
 
 
