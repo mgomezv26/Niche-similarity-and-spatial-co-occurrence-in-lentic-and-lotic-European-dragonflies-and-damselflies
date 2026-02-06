@@ -435,7 +435,6 @@ matriz_diferencias <- function(var) {
 }
 
 # FUNCION VALORES MEDIOS
-
 matriz_promedios <- function(var) {
   x <- lentic_vars[[var]]
   outer(x, x, FUN = function(a, b) (a + b)/2) %>%
@@ -492,7 +491,6 @@ matriz_diferencias <- function(var) {
 }
 
 # FUNCION VALORES MEDIOS
-
 matriz_promedios <- function(var) {
   x <- data_vars[[var]]
   outer(x, x, FUN = function(a, b) (a + b)/2) %>%
@@ -550,7 +548,6 @@ matriz_diferencias <- function(var) {
 }
 
 # FUNCION VALORES MEDIOS
-
 matriz_promedios <- function(var) {
   x <- data_vars[[var]]
   outer(x, x, FUN = function(a, b) (a + b)/2) %>%
