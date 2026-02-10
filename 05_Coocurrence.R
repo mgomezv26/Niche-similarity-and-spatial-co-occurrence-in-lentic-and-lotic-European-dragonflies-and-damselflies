@@ -40,15 +40,15 @@ Three of these species belong to the lentic group, and one to the lotic group:
 
 lotic_grid <-st_read("01_Data/03_Data_species/Grid_Lotic.gpkg")
 lotic_grid_df <- as.data.frame(lotic_grid)
-#colnames(lotic_grid_df)
-lotic_grid_df <- select(lotic_grid_df, c(-sp_21, -sp_124, -geometry))
+colnames(lotic_grid_df)
+lotic_grid_df <- select(lotic_grid_df, c(-sp_21, -sp_124, -geom))
 
 # LENTIC --------------------------------------------------------------------------------------------
 
 lentic_grid <-st_read("01_Data/03_Data_species/Grid_Lentic.gpkg")
 lentic_grid_df <- as.data.frame(lentic_grid) #transformar en df
 #colnames(lentic_grid_df)
-lentic_grid_df <- select(lentic_grid_df, c(-sp_14, -sp_67, -sp_91, -geometry))
+lentic_grid_df <- select(lentic_grid_df, c(-sp_14, -sp_67, -sp_91, -geom))
 
 # COMBINE DATA --------------------------------------------------------------------------------------------
 
@@ -63,6 +63,7 @@ lentic_species <- species_group %>% filter(group == "Lentic") %>% pull(species)
 lotic_species  <- species_group %>% filter(group == "Lotic")  %>% pull(species)
 
 # CALCULATE COOCURRENCE --------------------------------------------------------------------------------------------
+
 # Function to calculate shared grids between lentic–lotic pairs
 get_intergroup_shared_grids <- function(data, lentic_sp, lotic_sp) {
   result <- list()
@@ -89,5 +90,43 @@ df_intergroup_overlap <- df_intergroup_overlap %>%
                          paste(sp2, sp1, sep = "_")))
 head(df_intergroup_overlap)
 
-# SAVE RESULTS --------------------------------------------------------------------------------------------
-write.csv(df_intergroup_overlap, "intergroup_cooccurrence.csv", row.names = FALSE)
+# SAVE RESULTS
+write.csv(df_intergroup_overlap, "01_Data/04_Data_Analysis/03_LenticVSLotic/intergroup_cooccurrence.csv", row.names = FALSE)
+
+# Function to calculate shared grids within a group (e.g., lentic–lentic or lotic–lotic)
+get_intragroup_shared_grids <- function(data, species_vec) {
+  result <- list()
+  
+  # generates all unique combinations of 2 elements of x. Only unique combinations (avoids A-A and duplicates A-B / B-A)
+  combs <- combn(species_vec, 2, simplify = FALSE)
+  
+  for (pair in combs) {
+    sp1 <- pair[1]
+    sp2 <- pair[2]
+    
+    if (sp1 %in% names(data) & sp2 %in% names(data)) {
+      shared_grids <- sum(data[[sp1]] == 1 & data[[sp2]] == 1, na.rm = TRUE)
+      
+      result <- append(result, list(
+        data.frame(sp1 = sp1, sp2 = sp2, cooccurrence_cells = shared_grids)
+      ))
+    }
+  }
+  
+  do.call(rbind, result)
+}
+
+# LENTIC–LENTIC
+df_lentic_lentic <- get_intragroup_shared_grids(all_sp, lentic_species) %>%
+  mutate(PairID = paste(sp1, sp2, sep = "_"))
+
+# LOTIC–LOTIC
+df_lotic_lotic <- get_intragroup_shared_grids(all_sp, lotic_species) %>%
+  mutate(PairID = paste(sp1, sp2, sep = "_"))
+
+# SAVE RESULTS
+write.csv(df_lentic_lentic, "01_Data/04_Data_Analysis/01_Lentic/lentic_lentic_cooccurrence.csv", row.names = FALSE)
+write.csv(df_lotic_lotic,  "01_Data/04_Data_Analysis/02_Lotic/lotic_lotic_cooccurrence.csv",  row.names = FALSE)
+
+
+
