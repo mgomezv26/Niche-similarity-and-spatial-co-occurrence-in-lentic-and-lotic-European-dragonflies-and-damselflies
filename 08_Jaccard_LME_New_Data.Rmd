@@ -1,0 +1,938 @@
+---
+title: "Predictors of niche similarity"
+author: "Gómez-Vadillo, Mónica ([GitHub: @mgomezzv26](https://github.com/mgomezzv26))"
+date: "`r Sys.Date()`"
+geometry: "left=2cm,right=2cm,top=1.5cm,bottom=1.5cm"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+  pdf_document:
+    toc: true
+author-url: "https://github.com/mgomezv26"
+---
+
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(lme4)
+library(MuMIn)
+library(ggplot2)
+library(tibble)
+library(patchwork) 
+library(fmsb)
+```
+
+```{r}
+cat("Versions of the libraries used:\n")
+cat("dplyr:", as.character(packageVersion("dplyr")), "\n") # dplyr: 1.1.4
+cat("tidyr:", as.character(packageVersion("tidyr")), "\n") # tidyr: 1.3.1 
+cat("readxl:", as.character(packageVersion("readxl")), "\n") # readxl: 1.4.5 
+cat("lme4:", as.character(packageVersion("lme4")), "\n") # lme4: 1.1.37  
+cat("MuMIn:", as.character(packageVersion("MuMIn")), "\n") # MuMIn: 1.48.11
+cat("ggplot2:", as.character(packageVersion("ggplot2")), "\n") # ggplot2:4.0.0 
+cat("tibble:", as.character(packageVersion("tibble")), "\n") # tibble: 3.3.0  
+cat("patchwork:", as.character(packageVersion("patchwork")), "\n") # patchwork: 1.3.2
+cat("fmsb:", as.character(packageVersion("fmsb")), "\n") # fmsb:0.7.6   
+```
+
+```{r}
+species_group <- read_excel("01_Data/03_Data_species/List_of_species.xlsx", sheet = "species_group")
+```
+
+
+# A. LENTIC SPECIES
+
+```{r}
+MJaccard_Lentic <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/MJacc_lentic.csv", row.names = 1)
+```
+
+
+```{r}
+mean_mean_elev <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mdif_mean_mean_elev.csv", row.names = 1)
+mean_min_elev <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mdif_mean_min_elev.csv", row.names = 1)
+mean_max_elev <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mdif_mean_max_elev.csv", row.names = 1)
+mean_range_elev <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mmean_mean_range_elev.csv",row.names = 1)
+mean_richness_h <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mmean_mean_richness_h.csv", row.names = 1)
+mean_shannon_h <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mmean_mean_shannon_h.csv", row.names = 1)
+volume <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mmean_volume.csv", row.names = 1)
+Multi_Climate_Range <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/Mmean_Multi_Climate_Range.csv", row.names = 1)
+```
+
+
+## 1. Convert matrices to long format
+
+```{r}
+mat_to_long <- function(mat, name) {
+  as.data.frame(as.table(as.matrix(mat))) %>%
+    rename(Species1 = Var1, Species2 = Var2, !!name := Freq)
+}
+
+df_Jaccard       <- mat_to_long(MJaccard_Lentic, "Jaccard")
+df_mean_elev     <- mat_to_long(mean_mean_elev, "mean_elev")
+df_min_elev      <- mat_to_long(mean_min_elev, "min_elev")
+df_max_elev      <- mat_to_long(mean_max_elev, "max_elev")
+df_range_elev    <- mat_to_long(mean_range_elev, "range_elev")
+df_richness_h    <- mat_to_long(mean_richness_h, "richness_h")
+df_shannon_h     <- mat_to_long(mean_shannon_h, "shannon_h")
+df_volume        <- mat_to_long(volume, "volume")
+df_climate_range <- mat_to_long(Multi_Climate_Range, "Multi_Climate_Range")
+```
+
+## 2. Combine all matrices into a single dataframe
+
+```{r}
+df_all <- df_Jaccard %>%
+  left_join(df_mean_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_min_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_max_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_range_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_richness_h, by = c("Species1", "Species2")) %>%
+  left_join(df_shannon_h, by = c("Species1", "Species2")) %>%
+  left_join(df_volume, by = c("Species1", "Species2")) %>%
+  left_join(df_climate_range, by = c("Species1", "Species2"))
+
+```
+
+
+## 3. Filter unique and lentic pairs
+
+```{r}
+df_all <- df_all %>%
+  left_join(species_group %>% rename(Species1 = species, Group1 = group), by = "Species1") %>%
+  left_join(species_group %>% rename(Species2 = species, Group2 = group), by = "Species2")
+
+df_all <- df_all %>%
+  mutate(PairID = paste(Species1, Species2, sep = "_"))
+
+all_pairs <- df_all$PairID
+
+
+# Keep only different lentil pairs
+df_lentic <- df_all %>%
+  filter(Group1 == "Lentic" & Group2 == "Lentic" & Species1 != Species2)
+
+```
+
+
+```{r}
+lentic_pairs <- df_lentic$PairID
+
+# Eliminated pairs
+removed_pairs <- setdiff(all_pairs, lentic_pairs)
+
+head(removed_pairs)
+
+```
+
+```{r}
+# Remove duplicates (keep only one address per pair)
+df_lentic <- df_lentic %>%
+  rowwise() %>%
+  mutate(PairID = paste(sort(c(Species1, Species2)), collapse = "_")) %>%
+  ungroup() %>%
+  distinct(PairID, .keep_all = TRUE)
+```
+
+
+```{r}
+head(df_lentic)
+```
+
+
+```{r}
+# Scale all predictor variables
+df_lentic <- df_lentic %>%
+  mutate(across(c(mean_elev, min_elev, max_elev, range_elev, richness_h, shannon_h, volume, Multi_Climate_Range),
+                scale))
+head(df_lentic)
+```
+
+
+## 4. Mixed model with random effects by species
+
+```{r}
+model_lentic <- lmer(Jaccard ~ mean_elev + min_elev + max_elev + range_elev +
+                       richness_h + shannon_h + volume + Multi_Climate_Range +
+                       (1 | Species1) + (1 | Species2),
+                     data = df_lentic, REML = FALSE)
+
+summary(model_lentic)
+
+```
+
+
+## 5. Model evaluation with AICc and selection
+
+```{r}
+options(na.action = "na.fail")
+modelos_lentic <- dredge(model_lentic, rank = "AICc")  # generates all subsets
+
+```
+
+```{r}
+# best models (ordered by AICc)
+head(modelos_lentic)
+```
+
+
+```{r}
+# See importance of each predictor
+sw(modelos_lentic)
+```
+Models with delta AICc < 4 are considered statistically competitive: therefore, instead of choosing a single model, a weighted average of the models with delta AICc < 4 is calculated. 
+
+```{r}
+# Average of models with delta AICc < 4
+modelo_avg_lentic <- model.avg(modelos_lentic, subset = delta < 4)
+summary(modelo_avg_lentic)
+```
+ 
+
+
+```{r}
+# Relative importance of each variable
+sw(modelo_avg_lentic)
+```
+
+## 6. Plots
+
+### Graph showing the importance of predictors (AICc weights)
+
+This graph shows how important each variable is in explaining Jaccard similarity, based on AICc weights.
+
+```{r}
+# Rename predictors
+importance_df <- as.data.frame(sw(modelo_avg_lentic)) %>%
+  rownames_to_column("Predictor") %>%
+  rename(Importance = `sw(modelo_avg_lentic)`) %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range")) %>%
+  arrange(Importance)
+
+# Plot
+plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Importance, fill = Importance)) +
+  geom_col(width = 0.7, color = "black", show.legend = FALSE) +
+  coord_flip() +
+  scale_fill_gradient(low = "#a6cee3", high = "#1f78b4") +
+  labs(title = "Relative importance of predictors (AICc weight)",
+       x = "Predictor",
+       y = "AICc weight (importance)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(color = "black"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+
+plot_i
+
+```
+
+```{r}
+#ggsave("04_Figures/Figure_1_lentic_new.png", plot = plot_i, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+### Graph of averaged coefficients with confidence intervals
+
+This graph shows the averaged coefficients for each predictor along with their standard errors. This allows you to see the direction and magnitude of the effect.
+
+```{r}
+# Rename predictors in coefs_df
+coefs_lentic <- summary(modelo_avg_lentic)$coefmat.full
+coefs_df <- as.data.frame(coefs_lentic) %>%
+  rownames_to_column("Predictor") %>%
+  filter(Predictor != "(Intercept)") %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range"))
+
+# Calculate 95% CI
+coefs_df <- coefs_df %>%
+  mutate(lower = Estimate - 1.96 * `Std. Error`,
+         upper = Estimate + 1.96 * `Std. Error`)
+
+# Plot
+plot_ci <- ggplot(coefs_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
+  geom_point(size = 3, color = "#1f78b4") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "#1f78b4") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  coord_flip() +
+  labs(title = "Model-averaged coefficients with 95% CI (ΔAICc < 4)",
+       x = "Predictor",
+       y = "Estimated coefficient (± 95% CI)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(color = "black"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+plot_ci
+
+```
+
+```{r}
+#ggsave("04_Figures/Figure_2_lentic_new.png", plot = plot_ci, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+```{r}
+# combined_plot <- (plot_i | plot_ci)
+# print(combined_plot)
+#ggsave("04_Figures/Figure_2_combined_lentic_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+```
+
+
+# B. LOTIC SPECIES
+
+```{r}
+MJaccard_Lotic <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/MJacc_lotic.csv", row.names = 1)
+```
+
+
+```{r}
+mean_mean_elev <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mdif_mean_mean_elev.csv", row.names = 1)
+mean_min_elev <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mdif_mean_min_elev.csv", row.names = 1)
+mean_max_elev <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mdif_mean_max_elev.csv", row.names = 1)
+mean_range_elev <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mmean_mean_range_elev.csv", row.names = 1)
+mean_richness_h <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mmean_mean_richness_h.csv",  row.names = 1)
+mean_shannon_h <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mmean_mean_shannon_h.csv", row.names = 1)
+volume <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mmean_volume.csv", row.names = 1)
+Multi_Climate_Range <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/Mmean_Multi_Climate_Range.csv", row.names = 1)
+
+```
+
+
+## 1. Convert matrices to long format
+
+```{r}
+mat_to_long <- function(mat, name) {
+  as.data.frame(as.table(as.matrix(mat))) %>%
+    rename(Species1 = Var1, Species2 = Var2, !!name := Freq)
+}
+
+df_Jaccard       <- mat_to_long(MJaccard_Lotic, "Jaccard")
+df_mean_elev     <- mat_to_long(mean_mean_elev, "mean_elev")
+df_min_elev      <- mat_to_long(mean_min_elev, "min_elev")
+df_max_elev      <- mat_to_long(mean_max_elev, "max_elev")
+df_range_elev    <- mat_to_long(mean_range_elev, "range_elev")
+df_richness_h    <- mat_to_long(mean_richness_h, "richness_h")
+df_shannon_h     <- mat_to_long(mean_shannon_h, "shannon_h")
+df_volume        <- mat_to_long(volume, "volume")
+df_climate_range <- mat_to_long(Multi_Climate_Range, "Multi_Climate_Range")
+```
+
+## 2. Combine all matrices into a single dataframe
+
+```{r}
+df_all <- df_Jaccard %>%
+  left_join(df_mean_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_min_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_max_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_range_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_richness_h, by = c("Species1", "Species2")) %>%
+  left_join(df_shannon_h, by = c("Species1", "Species2")) %>%
+  left_join(df_volume, by = c("Species1", "Species2")) %>%
+  left_join(df_climate_range, by = c("Species1", "Species2"))
+
+```
+
+
+## 3. Filter unique and lotic pairs
+
+```{r}
+df_all <- df_all %>%
+  left_join(species_group %>% rename(Species1 = species, Group1 = group), by = "Species1") %>%
+  left_join(species_group %>% rename(Species2 = species, Group2 = group), by = "Species2")
+
+df_all <- df_all %>%
+  mutate(PairID = paste(Species1, Species2, sep = "_"))
+
+all_pairs <- df_all$PairID
+
+df_lotic <- df_all %>%
+  filter(Group1 == "Lotic" & Group2 == "Lotic" & Species1 != Species2)
+
+```
+
+```{r}
+#write.csv(df_lotic, "df_lotic.csv")
+```
+
+```{r}
+# Remove duplicates (keep only one address per pair)
+df_lotic <- df_lotic %>%
+  rowwise() %>%
+  mutate(PairID = paste(sort(c(Species1, Species2)), collapse = "_")) %>%
+  ungroup() %>%
+  distinct(PairID, .keep_all = TRUE)
+```
+
+```{r}
+# Scale all predictor variables
+df_lotic <- df_lotic %>%
+  mutate(across(c(mean_elev, min_elev, max_elev, range_elev, richness_h, shannon_h, volume, Multi_Climate_Range),
+                scale))
+
+```
+
+## 4. Mixed model with random effects by species
+
+```{r}
+model_lotic <- lmer(Jaccard ~ mean_elev + min_elev + max_elev + range_elev +
+                       richness_h + shannon_h + volume + Multi_Climate_Range +
+                       (1 | Species1) + (1 | Species2),
+                     data = df_lotic, REML = FALSE)
+
+summary(model_lotic)
+```
+
+
+## 5. Model evaluation with AICc and selection
+
+```{r}
+options(na.action = "na.fail")
+modelos_lotic <- dredge(model_lotic, rank = "AICc")
+
+```
+
+```{r}
+# best models (ordered by AICc) 
+head(modelos_lotic)
+```
+
+```{r}
+modelos_lotic
+```
+
+
+```{r}
+# See importance of each predictor
+sw(modelos_lotic)
+```
+
+
+```{r}
+# Average of models with delta AICc < 4
+modelo_avg_lotic <- model.avg(modelos_lotic, subset = delta < 4)
+summary(modelo_avg_lotic)
+```
+
+
+```{r}
+# Relative importance of each variable
+sw(modelo_avg_lotic)
+```
+
+
+## 6. Plots
+
+### Graph showing the importance of predictors (AICc weights)
+
+```{r}
+# Rename predictors
+importance_df <- as.data.frame(sw(modelo_avg_lotic)) %>%
+  rownames_to_column("Predictor") %>%
+  rename(Importance = `sw(modelo_avg_lotic)`) %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range")) %>%
+  arrange(Importance)
+
+# Plot
+plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Importance, fill = Importance)) +
+  geom_col(width = 0.7, color = "black", show.legend = TRUE) +
+  coord_flip() +
+  scale_fill_gradient(low = "#b2df8a", high = "#33a02c") +
+  labs(title = "Relative importance of predictors (AICc weight)",
+       x = "Predictor",
+       y = "AICc weight (importance)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(color = "black"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+plot_i
+```
+
+```{r}
+#ggsave("04_Figures/Figure_3_lotic_new.png", plot = plot_i, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+### Graph of averaged coefficients with confidence intervals
+
+```{r}
+# Rename predictors in coefs_df
+coefs_lotic <- summary(modelo_avg_lotic)$coefmat.full
+coefs_df <- as.data.frame(coefs_lotic) %>%
+  rownames_to_column("Predictor") %>%
+  filter(Predictor != "(Intercept)") %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range"))
+
+# Calculate 95% CI
+coefs_df <- coefs_df %>%
+  mutate(lower = Estimate - 1.96 * `Std. Error`,
+         upper = Estimate + 1.96 * `Std. Error`)
+
+# Plot
+plot_ci <- ggplot(coefs_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
+  geom_point(size = 3, color = "#33a02c") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "#33a02c") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  coord_flip() +
+  labs(title = "Model-averaged coefficients with 95% CI (ΔAICc < 4)",
+       x = "Predictor",
+       y = "Estimated coefficient (± 95% CI)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(color = "black"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+
+plot_ci
+```
+
+```{r}
+#ggsave("04_Figures/Figure_4_lotic_new.png", plot = plot_ci, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+```{r}
+# combined_plot <- (plot_i | plot_ci)
+# print(combined_plot)
+# 
+# ggsave("04_Figures/Figure_3_combined_lotic_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+```
+
+
+
+# C. ANALYSIS BETWEEN GROUPS (lentic vs. lotic)
+
+```{r}
+MJaccard_all <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/MJacc_LenticVSLotic.csv", row.names = 1)
+```
+
+
+```{r}
+mean_mean_elev <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mdif_mean_mean_elev.csv", row.names = 1)
+mean_min_elev <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mdif_mean_min_elev.csv", row.names = 1)
+mean_max_elev <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mdif_mean_max_elev.csv", row.names = 1)
+mean_range_elev <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mmean_mean_range_elev.csv", row.names = 1)
+mean_richness_h <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mmean_mean_richness_h.csv",  row.names = 1)
+mean_shannon_h <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mmean_mean_shannon_h.csv", row.names = 1)
+volume <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mmean_volume.csv", row.names = 1)
+Multi_Climate_Range <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/Mmean_Multi_Climate_Range.csv", row.names = 1)
+
+```
+
+
+## 1. Convert matrices to long format
+
+```{r}
+mat_to_long <- function(mat, name) {
+  as.data.frame(as.table(as.matrix(mat))) %>%
+    rename(Species1 = Var1, Species2 = Var2, !!name := Freq)
+}
+
+df_Jaccard       <- mat_to_long(MJaccard_all, "Jaccard")
+df_mean_elev     <- mat_to_long(mean_mean_elev, "mean_elev")
+df_min_elev      <- mat_to_long(mean_min_elev, "min_elev")
+df_max_elev      <- mat_to_long(mean_max_elev, "max_elev")
+df_range_elev    <- mat_to_long(mean_range_elev, "range_elev")
+df_richness_h    <- mat_to_long(mean_richness_h, "richness_h")
+df_shannon_h     <- mat_to_long(mean_shannon_h, "shannon_h")
+df_volume        <- mat_to_long(volume, "volume")
+df_climate_range <- mat_to_long(Multi_Climate_Range, "Multi_Climate_Range")
+```
+
+```{r}
+head(df_mean_elev)
+```
+
+
+## 2. Combine all matrices into a single dataframe
+
+```{r}
+df_all <- df_Jaccard %>%
+  left_join(df_mean_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_min_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_max_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_range_elev, by = c("Species1", "Species2")) %>%
+  left_join(df_richness_h, by = c("Species1", "Species2")) %>%
+  left_join(df_shannon_h, by = c("Species1", "Species2")) %>%
+  left_join(df_volume, by = c("Species1", "Species2")) %>%
+  left_join(df_climate_range, by = c("Species1", "Species2"))
+
+```
+
+## 3. Filter intergroup pairs
+
+```{r}
+df_all <- df_all %>%
+  left_join(species_group %>% rename(Species1 = species, Group1 = group), by = "Species1") %>%
+  left_join(species_group %>% rename(Species2 = species, Group2 = group), by = "Species2")
+
+df_all <- df_all %>%
+  mutate(PairID = paste(Species1, Species2, sep = "_"))
+
+all_pairs <- df_all$PairID
+
+# Mantener solo pares lénticos diferentes
+df_inter  <- df_all %>%
+  filter(((Group1 == "Lentic" & Group2 == "Lotic") | (Group1 == "Lotic" & Group2 == "Lentic")) & Species1 != Species2)
+
+
+```
+
+```{r}
+df_inter <- df_inter %>%
+  rowwise() %>%
+  mutate(PairID_sorted = paste(sort(c(Species1, Species2)), collapse = "_")) %>%
+  ungroup() %>%
+  distinct(PairID_sorted, .keep_all = TRUE)
+
+```
+
+```{r}
+head(df_inter)
+```
+
+```{r}
+df_inter <- df_inter %>%
+  mutate(across(c(mean_elev, min_elev, max_elev, range_elev, richness_h, shannon_h, volume, Multi_Climate_Range),
+                scale))
+head(df_inter)
+```
+
+
+## 4. Mixed model with random effects by species
+
+```{r}
+model_inter <- lmer(Jaccard ~ mean_elev + min_elev + max_elev + range_elev +
+                       richness_h + shannon_h + volume + Multi_Climate_Range +
+                       (1 | Species1) + (1 | Species2),
+                     data = df_inter, REML = FALSE)
+
+summary(model_inter)
+
+```
+
+## 5. Model evaluation with AICc and selection
+
+```{r}
+options(na.action = "na.fail")
+modelos_inter <- dredge(model_inter, rank = "AICc")
+```
+
+```{r}
+# best models (ordered by AICc) 
+head(modelos_inter)
+```
+
+```{r}
+# See importance of each predictor
+sw(modelos_inter)
+```
+
+```{r}
+# Average of models with delta AICc < 4
+modelo_avg_inter <- model.avg(modelos_inter, subset = delta < 4)
+summary(modelo_avg_inter)
+```
+
+
+```{r}
+# Relative importance of each variable
+sw(modelo_avg_inter)
+```
+
+## 6. Plots
+
+### Graph showing the importance of predictors (AICc weights)
+
+```{r}
+# Rename predictors
+importance_df <- as.data.frame(sw(modelo_avg_inter)) %>%
+  rownames_to_column("Predictor") %>%
+  rename(Importance = `sw(modelo_avg_inter)`) %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range")) %>%
+  arrange(Importance)
+
+# Plot
+plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Importance, fill = Importance)) +
+  geom_col(width = 0.7, color = "black", show.legend = TRUE) +
+  coord_flip() +
+  scale_fill_gradient(low = "#fdbf6f", high = "#ff7f00") +
+  labs(title = "Relative importance of predictors (AICc weight)",
+       x = "Predictor",
+       y = "AICc weight (importance)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(color = "black"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+plot_i
+```
+
+```{r}
+#ggsave("04_Figures/Figure_5_inter_new.png", plot = plot_i, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+### Graph of averaged coefficients with confidence intervals
+
+```{r}
+# Rename predictors in coefs_df
+coefs_inter <- summary(modelo_avg_inter)$coefmat.full
+coefs_df <- as.data.frame(coefs_inter) %>%
+  rownames_to_column("Predictor") %>%
+  filter(Predictor != "(Intercept)") %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range"))
+
+# Calculate 95% CI
+coefs_df <- coefs_df %>%
+  mutate(lower = Estimate - 1.96 * `Std. Error`,
+         upper = Estimate + 1.96 * `Std. Error`)
+
+# Plot
+plot_ci <- ggplot(coefs_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
+  geom_point(size = 3, color = "#ff7f00") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "#ff7f00") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  coord_flip() +
+  labs(title = "Model-averaged coefficients with 95% CI (ΔAICc < 4)",
+       x = "Predictor",
+       y = "Estimated coefficient (± 95% CI)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(color = "black"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+plot_ci
+
+```
+
+```{r}
+#ggsave("04_Figures/Figure_6_inter_new.png", plot = plot_ci, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+```{r}
+# combined_plot <- (plot_i | plot_ci)
+# print(combined_plot)
+# ggsave("04_Figures/Figure_4_combined_inter_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+```
+
+
+# D. COMPARISON BETWEEN THE THREE GROUPS
+```{r}
+coefs_lentic <- as.data.frame(coefs_lentic)
+coefs_lotic <- as.data.frame(coefs_lotic)
+coefs_inter <- as.data.frame(coefs_inter)
+
+coefs_lentic$Group <- "Intra-Lentic"
+coefs_lotic$Group <- "Intra-Lotic"
+coefs_inter$Group <- "Intergroup"
+
+```
+
+
+```{r}
+# Combine into a single dataframe
+coefs_all <- bind_rows(coefs_lentic, coefs_lotic, coefs_inter)
+
+```
+
+```{r}
+coefs_all <- coefs_all %>% 
+  rownames_to_column(var = "Predictor")
+```
+
+```{r}
+coefs_all$Predictor <- sub("\\.\\.\\..*$", "", coefs_all$Predictor)
+
+```
+
+
+```{r}
+# Rename predictors for plotting
+coefs_all <- coefs_all %>%
+  filter(Predictor != "(Intercept)") %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range"))
+```
+
+```{r}
+# Calculate IC
+coefs_all <- coefs_all %>%
+  mutate(lower = Estimate - 1.96 * `Std. Error`,
+         upper = Estimate + 1.96 * `Std. Error`)
+```
+
+
+```{r}
+# combine plot
+coefplot <- ggplot(coefs_all, aes(x = Estimate, y = Predictor, color = Group)) +
+  geom_point(position = position_dodge(width = 0.7), size = 3) +
+  geom_errorbar(aes(xmin = lower, xmax = upper), width = 0.2, position = position_dodge(width = 0.7)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = c("Intra-Lentic" = "#1f78b4", "Intra-Lotic" = "#33a02c", "Intergroup" = "#ff7f00")) +
+  labs(title = "Model-averaged coefficients across groups",
+       x = "Estimated coefficient (± 95% CI)",
+       y = "Predictor") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        axis.title.y = element_text(size = 14),
+        axis.text = element_text(size = 12))
+coefplot
+```
+
+```{r}
+#ggsave("04_Figures/Figure_7_new.png", plot = coefplot, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+```{r}
+importance_lentic <- as.data.frame(sw(modelo_avg_lentic)) %>% rownames_to_column("Predictor") %>% mutate(Group = "Intra-Lentic")
+importance_lotic <- as.data.frame(sw(modelo_avg_lotic)) %>% rownames_to_column("Predictor") %>% mutate(Group = "Intra-Lotic")
+importance_inter <- as.data.frame(sw(modelo_avg_inter)) %>% rownames_to_column("Predictor") %>% mutate(Group = "Intergroup")
+
+```
+
+
+```{r}
+# Extract vector and convert to dataframe
+importance_lentic <- sw(modelo_avg_lentic)
+importance_lotic <- sw(modelo_avg_lotic)
+importance_inter <- sw(modelo_avg_inter)
+
+importance_lentic_df <- data.frame(Predictor = names(importance_lentic),
+                                   Importance = as.numeric(importance_lentic),
+                                   Group = "Intra-Lentic")
+
+importance_lotic_df <- data.frame(Predictor = names(importance_lotic),
+                                  Importance = as.numeric(importance_lotic),
+                                  Group = "Intra-Lotic")
+
+importance_inter_df <- data.frame(Predictor = names(importance_inter),
+                                  Importance = as.numeric(importance_inter),
+                                  Group = "Intergroup")
+
+```
+
+```{r}
+importance_lentic_df
+```
+
+```{r}
+importance_all <- bind_rows(importance_lentic_df, importance_lotic_df, importance_inter_df)
+
+# Rename predictors for plotting
+importance_all <- importance_all %>%
+  mutate(Predictor = recode(Predictor,
+                            mean_elev = "Mean elevation",
+                            min_elev = "Minimum elevation",
+                            max_elev = "Maximum elevation",
+                            range_elev = "Elevation range",
+                            richness_h = "Habitat richness",
+                            shannon_h = "Shannon diversity",
+                            volume = "Niche volume",
+                            Multi_Climate_Range = "Climatic range"))
+
+```
+
+
+```{r}
+importance_all$Predictor <- paste0(importance_all$Predictor, "\n\n")
+
+importance_plot <- ggplot(importance_all, aes(x = Importance, y = Predictor, fill = Group)) +
+  geom_col(position = position_dodge(width = 0.5), color = "black", width = 0.5) +
+  scale_fill_manual(values = c("Intra-Lentic" = "#1f78b4", "Intra-Lotic" = "#33a02c", "Intergroup" = "#ff7f00")) +
+  labs(title = "Relative importance of predictors across groups",
+       x = "AICc weight",
+       y = "Predictor") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5,size = 14))
+
+
+importance_plot
+```
+
+```{r}
+#ggsave("04_Figures/Figure_8_new.png", plot = importance_plot, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+```{r}
+# combined_plot <- (importance_plot | coefplot)
+# print(combined_plot)
+# 
+# ggsave("04_Figures/Figure_6_combined_comparasion_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+```
+
