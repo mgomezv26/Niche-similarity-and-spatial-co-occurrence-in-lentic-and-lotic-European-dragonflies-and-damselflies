@@ -1,0 +1,508 @@
+---
+title: "Relationship between niche similarity and co-occurrence"
+author: "Gómez-Vadillo, Mónica ([GitHub: @mgomezzv26](https://github.com/mgomezzv26))"
+date: "`r Sys.Date()`"
+geometry: "left=2cm,right=2cm,top=2cm,bottom=2cm"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+  pdf_document:
+    toc: true
+author-url: "https://github.com/mgomezv26"
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(tibble)
+library(patchwork) 
+library(fmsb)
+library(vegan)
+```
+
+```{r}
+cat("Versions of the libraries used:\n")
+cat("dplyr:", as.character(packageVersion("dplyr")), "\n") # dplyr: 1.1.4
+cat("tidyr:", as.character(packageVersion("tidyr")), "\n") # tidyr: 1.3.1 
+cat("readxl:", as.character(packageVersion("readxl")), "\n") # readxl: 1.4.5 
+cat("ggplot2:", as.character(packageVersion("ggplot2")), "\n") # ggplot2:4.0.0 
+cat("tibble:", as.character(packageVersion("tibble")), "\n") # tibble: 3.3.0  
+cat("patchwork:", as.character(packageVersion("patchwork")), "\n") # patchwork: 1.3.2
+cat("fmsb:", as.character(packageVersion("fmsb")), "\n") # fmsb:0.7.6   
+cat("vegan:", as.character(packageVersion("vegan")), "\n") # vegan: 2.7.2 
+```
+
+# A. LENTIC SPECIES
+
+```{r}
+MJaccard_Lentic <- read.csv("01_DATA/04_Data_Analysis/01_Lentic/MJacc_lentic.csv", row.names = 1)
+head(MJaccard_Lentic)
+```
+
+```{r}
+class(MJaccard_Lentic)
+```
+
+```{r}
+jaccard_matrix <- as.matrix(MJaccard_Lentic)
+class(jaccard_matrix)
+```
+
+```{r}
+all(rownames(jaccard_matrix) == colnames(jaccard_matrix))  # debe ser TRUE
+```
+
+
+```{r}
+setdiff(rownames(jaccard_matrix), colnames(jaccard_matrix))
+setdiff(colnames(jaccard_matrix), rownames(jaccard_matrix))
+
+```
+
+```{r}
+# Obtain the species that are in both rows and columns
+species_common <- intersect(rownames(jaccard_matrix), colnames(jaccard_matrix))
+
+# Subset and reorder
+jaccard_matrix <- jaccard_matrix[species_common, species_common]
+
+```
+
+```{r}
+all(rownames(jaccard_matrix) == colnames(jaccard_matrix))  # now it should be TRUE
+```
+
+## Co-occurrence
+
+```{r}
+# Read co-occurrence data
+cooc_df <- read.csv("01_Data/04_Data_Analysis/01_Lentic/lentic_lentic_cooccurrence.csv")
+head(cooc_df)
+```
+
+```{r}
+cooc_df <- cooc_df[complete.cases(cooc_df), ]
+
+# Ensure that species names are listed as factors or characters.
+cooc_df$sp1 <- as.character(cooc_df$sp1)
+cooc_df$sp2 <- as.character(cooc_df$sp2)
+
+```
+
+
+```{r}
+# Extract all unique species (from both columns)
+all_species <- sort(unique(c(cooc_df$sp1, cooc_df$sp2)))
+
+# Create empty array initialised to 0
+cooc_matrix <- matrix(0, nrow = length(all_species), ncol = length(all_species),
+                      dimnames = list(all_species, all_species))
+
+# Fill the matrix with the values of the number of shared grids
+for (i in 1:nrow(cooc_df)) {
+  sp1 <- cooc_df$sp1[i]
+  sp2 <- cooc_df$sp2[i]
+  val <- cooc_df$cooccurrence_cells[i]
+  
+  if (sp1 %in% all_species && sp2 %in% all_species) {
+    cooc_matrix[sp1, sp2] <- val
+    cooc_matrix[sp2, sp1] <- val
+  } else {
+    warning(paste("Species not found:", sp1, sp2))
+  }
+}
+```
+
+```{r}
+all_species
+```
+
+
+```{r}
+setdiff(unique(c(cooc_df$sp1, cooc_df$sp2)), all_species)
+```
+
+## Do both matrices have the same species?
+
+```{r}
+common_species <- intersect(rownames(jaccard_matrix), rownames(cooc_matrix))
+length(common_species)  # must be > 2 for the test to work
+
+# Subset both matrices with the same order
+jaccard_sub <- jaccard_matrix[common_species, common_species]
+cooc_sub <- cooc_matrix[common_species, common_species]
+
+```
+
+## MENTEL TEST
+
+```{r}
+# We convert to ‘dist’ objects
+jaccard_dist <- as.dist(1 - jaccard_sub)  # converts similarity to distance
+cooc_dist <- as.dist(cooc_sub)            # is now a valid measure (number of shared cells)
+
+# Mantel test
+mantel_result <- mantel(cooc_dist, jaccard_dist, method = "pearson", permutations = 999)
+
+# Result
+print(mantel_result)
+```
+
+r = -0.83 indicates a very strong negative correlation between the two matrices.
+
+The matrices are:
+
+- cooc_matrix: number of cells shared between pairs of species.
+
+- jaccard_sub: niche similarity, converted to distance (1 - Jaccard).
+
+Therefore:
+
+- The greater the niche distance (the less similar the niches are), the greater the co-occurrence.
+
+- This contradicts the typical ecological expectation (that species with more similar niches co-occur more).
+
+
+```{r}
+cooc_vec <- as.vector(cooc_dist)
+jaccard_vec <- as.vector(jaccard_dist)
+
+# Create dataframe
+df_plot <- data.frame(
+  jaccard = jaccard_vec,
+  cooccurrence = cooc_vec
+)
+
+# plot
+plot1 <- ggplot(df_plot, aes(x = jaccard, y = cooccurrence)) +
+  geom_point(alpha = 4, size = 1.2, shape = 16, color = "#a6cee3") +
+  geom_smooth(method = "lm", se = FALSE, color = "#1f78b4", linewidth = 1) +
+  labs(
+    title = "Intra-lentic: Niche vs Co-occurrence",
+    x = "Niche distance (1 - Jaccard)",
+    y = "Spatial co-occurrence"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+plot1
+```
+
+```{r}
+#ggsave("04_Figures/plot1_Intra_Lentic_mentel.png", plot = plot1, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+# B. LOTIC SPECIES
+
+```{r}
+MJaccard_Lotic <- read.csv("01_DATA/04_Data_Analysis/02_Lotic/MJacc_lotic.csv", row.names = 1)
+```
+
+
+```{r}
+jaccard_matrix <- as.matrix(MJaccard_Lotic)
+class(jaccard_matrix)
+```
+
+```{r}
+all(rownames(jaccard_matrix) == colnames(jaccard_matrix))  # debe ser TRUE
+```
+
+
+```{r}
+setdiff(rownames(jaccard_matrix), colnames(jaccard_matrix))
+setdiff(colnames(jaccard_matrix), rownames(jaccard_matrix))
+
+```
+
+```{r}
+species_common <- intersect(rownames(jaccard_matrix), colnames(jaccard_matrix))
+jaccard_matrix <- jaccard_matrix[species_common, species_common]
+```
+
+```{r}
+all(rownames(jaccard_matrix) == colnames(jaccard_matrix))
+```
+
+```{r}
+cooc_df <- read.csv("01_Data/04_Data_Analysis/02_Lotic/lotic_lotic_cooccurrence.csv")
+head(cooc_df)
+```
+
+
+```{r}
+cooc_df <- cooc_df[complete.cases(cooc_df), ]
+
+cooc_df$sp1 <- as.character(cooc_df$sp1)
+cooc_df$sp2 <- as.character(cooc_df$sp2)
+
+```
+
+
+```{r}
+all_species <- sort(unique(c(cooc_df$sp1, cooc_df$sp2)))
+
+cooc_matrix <- matrix(0, nrow = length(all_species), ncol = length(all_species),
+                      dimnames = list(all_species, all_species))
+
+for (i in 1:nrow(cooc_df)) {
+  sp1 <- cooc_df$sp1[i]
+  sp2 <- cooc_df$sp2[i]
+  val <- cooc_df$cooccurrence_cells[i]
+  
+  if (sp1 %in% all_species && sp2 %in% all_species) {
+    cooc_matrix[sp1, sp2] <- val
+    cooc_matrix[sp2, sp1] <- val
+  } else {
+    warning(paste("Species not found:", sp1, sp2))
+  }
+}
+```
+
+```{r}
+all_species
+```
+
+
+```{r}
+setdiff(unique(c(cooc_df$sp1, cooc_df$sp2)), all_species)
+```
+## Do both matrices have the same species?
+
+```{r}
+common_species <- intersect(rownames(jaccard_matrix), rownames(cooc_matrix))
+length(common_species)
+
+jaccard_sub <- jaccard_matrix[common_species, common_species]
+cooc_sub <- cooc_matrix[common_species, common_species]
+
+```
+
+## MENTEL TEST
+
+```{r}
+# convert to "dist"
+jaccard_dist <- as.dist(1 - jaccard_sub)  # convert similarity to distance
+cooc_dist <- as.dist(cooc_sub)            # is now a valid measure (number of shared cells)
+
+# Mantel Test
+mantel_result <- mantel(cooc_dist, jaccard_dist, method = "pearson", permutations = 999)
+print(mantel_result)
+
+```
+
+```{r}
+cooc_vec <- as.vector(cooc_dist)
+jaccard_vec <- as.vector(jaccard_dist)
+
+df_plot <- data.frame(
+  jaccard = jaccard_vec,
+  cooccurrence = cooc_vec
+)
+
+# plot
+plot2 <- ggplot(df_plot, aes(x = jaccard, y = cooccurrence)) +
+  geom_point(alpha = 4, size = 1.2, shape = 16, color = "#b2df8a") +
+  geom_smooth(method = "lm", se = FALSE, color = "#33a02c", linewidth = 1) + 
+  labs(
+    title = "Intra-lotic: Niche vs Co-occurrence",
+    x = "Niche distance (1 - Jaccard)",
+    y = "Spatial co-occurrence"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+plot2
+```
+
+
+```{r}
+#ggsave("04_Figures/plot2_lotic_mentel.png", plot = plot2, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+# C. ANALYSIS BETWEEN GROUPS (lentic vs. lotic)
+
+```{r}
+MJaccard_all <- read.csv("01_DATA/04_Data_Analysis/03_LenticVSLotic/MJacc_LenticVSLotic.csv", row.names = 1)
+```
+
+```{r}
+mat_to_long <- function(mat, name) {
+  as.data.frame(as.table(as.matrix(mat))) %>%
+    rename(Species1 = Var1, Species2 = Var2, !!name := Freq)
+}
+
+df_Jaccard <- mat_to_long(MJaccard_all, "Jaccard")
+```
+
+```{r}
+species_group <- read_excel("01_Data/03_Data_species/List_of_species.xlsx", sheet = "species_group")
+```
+
+
+```{r}
+df_Jaccard <- df_Jaccard %>%
+  left_join(species_group %>% rename(Species1 = species, Group1 = group), by = "Species1") %>%
+  left_join(species_group %>% rename(Species2 = species, Group2 = group), by = "Species2")
+
+df_Jaccard <- df_Jaccard %>%
+  mutate(PairID = paste(Species1, Species2, sep = "_"))
+
+all_pairs <- df_Jaccard$PairID
+
+# Keep only different lentil pairs
+df_inter  <- df_Jaccard %>%
+  filter(((Group1 == "Lentic" & Group2 == "Lotic") | (Group1 == "Lotic" & Group2 == "Lentic")) & Species1 != Species2)
+```
+
+```{r}
+colnames(df_inter)
+```
+
+```{r}
+# Ensure that species names are listed as factors or characters.
+df_inter$sp1 <- as.character(df_inter$Species1)
+df_inter$sp2 <- as.character(df_inter$Species2)
+```
+
+
+```{r}
+# Extract all unique species (from both columns)
+all_species <- sort(unique(c(df_inter$sp1, df_inter$sp2)))
+
+# Create empty array initialised to 0
+jaccard_matrix <- matrix(0, nrow = length(all_species), ncol = length(all_species),
+                      dimnames = list(all_species, all_species))
+
+# Fill the matrix with the values of the number of shared grids
+for (i in 1:nrow(df_inter)) {
+  sp1 <- df_inter$sp1[i]
+  sp2 <- df_inter$sp2[i]
+  val <- df_inter$Jaccard[i]
+  
+  if (sp1 %in% all_species && sp2 %in% all_species) {
+    jaccard_matrix[sp1, sp2] <- val
+    jaccard_matrix[sp2, sp1] <- val
+  } else {
+    warning(paste("Species not found:", sp1, sp2))
+  }
+}
+```
+
+```{r}
+cooc_df <- read_excel("01_Data/04_Data_Analysis/03_LenticVSLotic/intergroup_cooccurrence.xlsx")
+cooc_df <- cooc_df[complete.cases(cooc_df), ]
+head(cooc_df)
+```
+
+
+```{r}
+# Ensure that species names are listed as factors or characters.
+cooc_df$sp1 <- as.character(cooc_df$sp1)
+cooc_df$sp2 <- as.character(cooc_df$sp2)
+
+```
+
+
+```{r}
+# Extract all unique species (from both columns)
+all_species <- sort(unique(c(cooc_df$sp1, cooc_df$sp2)))
+
+# Create empty array initialised to 0
+cooc_matrix <- matrix(0, nrow = length(all_species), ncol = length(all_species),
+                      dimnames = list(all_species, all_species))
+
+# Fill the matrix with the values of the number of shared grids.
+for (i in 1:nrow(cooc_df)) {
+  sp1 <- cooc_df$sp1[i]
+  sp2 <- cooc_df$sp2[i]
+  val <- cooc_df$cooccurrence_cells[i]
+  
+  if (sp1 %in% all_species && sp2 %in% all_species) {
+    cooc_matrix[sp1, sp2] <- val
+    cooc_matrix[sp2, sp1] <- val
+  } else {
+    warning(paste("Species not found:", sp1, sp2))
+  }
+}
+```
+
+
+```{r}
+setdiff(unique(c(cooc_df$sp1, cooc_df$sp2)), all_species)
+```
+
+## Do both matrices have the same species?
+
+```{r}
+common_species <- intersect(rownames(jaccard_matrix), rownames(cooc_matrix))
+length(common_species)  # debe ser > 2 para que el test funcione
+
+# Subset ambas matrices con el mismo orden
+jaccard_sub <- jaccard_matrix[common_species, common_species]
+cooc_sub <- cooc_matrix[common_species, common_species]
+
+```
+
+## MENTEL TEST
+
+```{r}
+jaccard_dist <- as.dist(1 - jaccard_sub)
+cooc_dist <- as.dist(cooc_sub)
+
+mantel_result <- mantel(cooc_dist, jaccard_dist, method = "pearson", permutations = 999)
+print(mantel_result)
+
+```
+
+```{r}
+cooc_vec <- as.vector(cooc_dist)
+jaccard_vec <- as.vector(jaccard_dist)
+
+df_plot <- data.frame(
+  jaccard = jaccard_vec,
+  cooccurrence = cooc_vec
+)
+
+plot3 <- ggplot(df_plot, aes(x = jaccard, y = cooccurrence)) +
+  geom_point(alpha = 4, size = 1.2, shape = 16, color = "#fdbf6f") +
+  geom_smooth(method = "lm", se = FALSE, color = "#ff7f00", linewidth = 1) +
+  labs(
+    title = "Intergroup: Niche vs Co-occurrence",
+    x = "Niche distance (1 - Jaccard)",
+    y = "Spatial co-occurrence"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+plot3
+```
+
+```{r}
+#ggsave("04_Figures/plot3_Intergroup_mentel.png", plot = plot3, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+```{r}
+# Combine the three maps into a single figure
+# combined_plot <- (plot1 | plot2) /
+#   (plot3)
+# combined_plot
+```
+
+```{r}
+#ggsave("04_Figures/Combine_plots_Mentel.png", plot = combined_plot, width = 10, height = 5, units = "in", dpi = 600)
+```
+
+
+
