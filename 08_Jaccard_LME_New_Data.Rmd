@@ -219,6 +219,7 @@ importance_df <- as.data.frame(sw(modelo_avg_lentic)) %>%
                             Multi_Climate_Range = "Climatic range")) %>%
   arrange(Importance)
 
+
 # Plot
 plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Importance, fill = Importance)) +
   geom_col(width = 0.7, color = "black", show.legend = FALSE) +
@@ -237,7 +238,6 @@ plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Impo
   )
 
 plot_i
-
 ```
 
 ```{r}
@@ -296,9 +296,9 @@ plot_ci
 
 
 ```{r}
-# combined_plot <- (plot_i | plot_ci)
-# print(combined_plot)
-#ggsave("04_Figures/Figure_2_combined_lentic_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+combined_plot <- (plot_i | plot_ci)
+print(combined_plot)
+ggsave("04_Figures/Figure_2_combined_lentic_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
 ```
 
 
@@ -464,9 +464,10 @@ importance_df <- as.data.frame(sw(modelo_avg_lotic)) %>%
                             Multi_Climate_Range = "Climatic range")) %>%
   arrange(Importance)
 
+
 # Plot
 plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Importance, fill = Importance)) +
-  geom_col(width = 0.7, color = "black", show.legend = TRUE) +
+  geom_col(width = 0.7, color = "black", show.legend = FALSE) +
   coord_flip() +
   scale_fill_gradient(low = "#b2df8a", high = "#33a02c") +
   labs(title = "Relative importance of predictors (AICc weight)",
@@ -480,6 +481,7 @@ plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Impo
     panel.grid.major.y = element_blank(),
     panel.grid.minor.y = element_blank()
   )
+
 plot_i
 ```
 
@@ -537,10 +539,10 @@ plot_ci
 
 
 ```{r}
-# combined_plot <- (plot_i | plot_ci)
-# print(combined_plot)
-# 
-# ggsave("04_Figures/Figure_3_combined_lotic_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+combined_plot <- (plot_i | plot_ci)
+print(combined_plot)
+
+ggsave("04_Figures/Figure_3_combined_lotic_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
 ```
 
 
@@ -707,7 +709,7 @@ importance_df <- as.data.frame(sw(modelo_avg_inter)) %>%
 
 # Plot
 plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Importance, fill = Importance)) +
-  geom_col(width = 0.7, color = "black", show.legend = TRUE) +
+  geom_col(width = 0.7, color = "black", show.legend = FALSE) +
   coord_flip() +
   scale_fill_gradient(low = "#fdbf6f", high = "#ff7f00") +
   labs(title = "Relative importance of predictors (AICc weight)",
@@ -721,6 +723,7 @@ plot_i <- ggplot(importance_df, aes(x = reorder(Predictor, Importance), y = Impo
     panel.grid.major.y = element_blank(),
     panel.grid.minor.y = element_blank()
   )
+
 plot_i
 ```
 
@@ -779,9 +782,9 @@ plot_ci
 
 
 ```{r}
-# combined_plot <- (plot_i | plot_ci)
-# print(combined_plot)
-# ggsave("04_Figures/Figure_4_combined_inter_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
+combined_plot <- (plot_i | plot_ci)
+print(combined_plot)
+ggsave("04_Figures/Figure_4_combined_inter_new.png", plot = combined_plot, width = 15, height = 5, units = "in", dpi = 600)
 ```
 
 

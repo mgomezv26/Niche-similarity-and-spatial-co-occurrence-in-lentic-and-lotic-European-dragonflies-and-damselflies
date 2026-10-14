@@ -1,0 +1,4 @@
+"group","test","r","p","n_pairs","n_cells","permutations","seed"
+"Lentic-Lentic","Pearson Mantel, one-sided negative",-0.856724750079043,1e-04,3486,2317,9999,20261014
+"Lotic-Lotic","Pearson Mantel, one-sided negative",-0.657360538830502,1e-04,595,2317,9999,20261015
+"Lentic-Lotic","Pearson correlation, bipartite QAP, one-sided negative",-0.817565281554406,1e-04,2940,2317,9999,20261016

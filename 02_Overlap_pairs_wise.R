@@ -93,7 +93,7 @@ for (i in 1:(length(hv_list@HVList) - 1)) {
 }
 results
 
-write.csv(results, "02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_Lentic.csv", row.names = FALSE)
+write.csv(results, "02_Hypervolume/R_Overlap_pairs_wise/results_overlap_Lentic.csv", row.names = FALSE)
 
 
 # Lotic --------------------------------------------------------------------------------------------
@@ -159,7 +159,7 @@ for (i in 1:(length(hv_list@HVList) - 1)) {  # Ajustar el rango del primer bucle
   }
 }
 
-write.csv(results, "02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_Lotic.csv", row.names = FALSE)
+write.csv(results, "02_Hypervolume/R_Overlap_pairs_wise/results_overlap_Lotic.csv", row.names = FALSE)
 
 
 # All species --------------------------------------------------------------------------------------------
@@ -212,4 +212,4 @@ for (i in 1:(length(hv_list@HVList) - 1)) {
   }
 }
 
-write.csv(results, "02_Hypervolume/Results_Overlap_pairs_wise/results_overlap_all_species.csv", row.names = FALSE)
+write.csv(results, "02_Hypervolume/R_Overlap_pairs_wise/results_overlap_all_species.csv", row.names = FALSE)
